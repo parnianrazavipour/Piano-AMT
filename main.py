@@ -131,18 +131,19 @@ def evaluate(model, dataloader, criterion):
         for data in tqdm(dataloader, desc="Evaluating"):
             audio = data["audio"].to(device)
             onset_roll = data["frame_roll"].to(device)
+            mel_spectrogram = librosa.feature.melspectrogram(
+                y=audio.cpu().numpy(), sr=sr, n_fft=2048, hop_length=160, n_mels=229, fmin=0, fmax=8000
+            )
+            mel_spectrogram = (mel_spectrogram - np.mean(mel_spectrogram)) / np.std(mel_spectrogram)
+            mel_spectrogram = torch.tensor(mel_spectrogram).to(device)
+            output = model(mel_spectrogram)
 
-            # Forward pass
-            output = model(audio)
-
-            # Compute loss
             loss = criterion(output, onset_roll)
             total_loss += loss.item()
 
-            # Apply threshold to get binary predictions
-            predicted_frames = (output > 0.6).float()  # Threshold at 0.5
+            predicted_frames = (output > 0.6).float()  # may change
 
-            # Count correct onsets (True Positives)
+            # TPs
             correct_onsets = ((predicted_frames == 1) & (onset_roll == 1)).float().sum()
             predicted_onsets = predicted_frames.sum()  # All predicted onsets (1s)
             actual_onsets = onset_roll.sum()  # All actual onsets (1s)
@@ -216,7 +217,6 @@ def visualize_predictions(model, dataloader, save_dir="visualizations", num_samp
     model.eval()
     device = next(model.parameters()).device
 
-    # Create directory to save the visualizations and vectors
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
@@ -239,30 +239,24 @@ def visualize_predictions(model, dataloader, save_dir="visualizations", num_samp
                 fmax=8000
             )
             mel_spectrogram = (mel_spectrogram - np.mean(mel_spectrogram)) / np.std(mel_spectrogram)
-
-            # Get predictions from model
-            output = model(audio)
+            mel_spectrogram = torch.tensor(mel_spectrogram).to(device)
+            output = model(mel_spectrogram)
             predicted_onsets = (output > 0.6).cpu().numpy()
 
-            # Visualize the spectrogram, predicted onsets, and ground truth
-            for i in range(len(audio)):  # Loop over each sample in the batch
+            for i in range(len(audio)):  
                 fig, axs = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
 
-                # Plot the Mel Spectrogram (using a color map for better clarity)
-                mel_spectrogram_single = mel_spectrogram[i, 0, :, :]  # Remove extra dimensions
+                mel_spectrogram_single = mel_spectrogram[i, 0, :, :] 
                 axs[0].imshow(librosa.power_to_db(mel_spectrogram_single, ref=np.max), origin='lower', aspect='auto')
                 axs[0].set_title(f"Mel Spectrogram (Sample {step+1}, Instance {i+1})")
                 axs[0].set_ylabel("Mel Frequencies")
 
-                # Convert predicted_onsets and ground truth onsets to stem plots
                 time_frames = np.arange(predicted_onsets[i].shape[0])
 
-                # Plot predicted onsets using stem plot
                 axs[1].stem(time_frames, np.sum(predicted_onsets[i], axis=1), linefmt='r-', markerfmt='ro', basefmt=' ')
                 axs[1].set_title("Predicted Onsets")
                 axs[1].set_ylabel("Onsets (Sum Over Notes)")
 
-                # Plot ground truth onsets using stem plot
                 axs[2].stem(time_frames, np.sum(onset_roll[i].cpu().numpy(), axis=1), linefmt='g-', markerfmt='go', basefmt=' ')
                 axs[2].set_title("Ground Truth Onsets")
                 axs[2].set_ylabel("Onsets (Sum Over Notes)")
@@ -270,12 +264,10 @@ def visualize_predictions(model, dataloader, save_dir="visualizations", num_samp
 
                 plt.tight_layout()
 
-                # Save the figure
                 fig_path = os.path.join(save_dir, f"sample_{step+1}_instance_{i+1}.png")
                 plt.savefig(fig_path)
                 plt.close(fig)
 
-                # Save the predicted onsets and ground truth as text files
                 pred_txt_path = os.path.join(save_dir, f"predicted_onsets_sample_{step+1}_instance_{i+1}.txt")
                 gt_txt_path = os.path.join(save_dir, f"ground_truth_onsets_sample_{step+1}_instance_{i+1}.txt")
 
@@ -292,7 +284,6 @@ def train_maestro(epochs=10):
     test_dataloader, train_dataloader = load_maestro()
     model = CRNN().to(device)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
-        # Calculate pos_weight for BCEWithLogitsLoss
     total_frames = sum([data["frame_roll"].numel() for data in train_dataloader])
     onset_frames = sum([data["frame_roll"].sum().item() for data in train_dataloader])
     pos_weight = (total_frames - onset_frames) / onset_frames
@@ -306,7 +297,7 @@ def train_maestro(epochs=10):
         total_predicted_onsets = 0
         total_actual_onsets = 0
         total_silent_frames = 0 
-        total_frames = 0  # Total number of frames
+        total_frames = 0  
 
         for step, data in enumerate(tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{epochs}")):
             audio = data["audio"].to(device)
@@ -318,15 +309,12 @@ def train_maestro(epochs=10):
             mel_spectrogram = (mel_spectrogram - np.mean(mel_spectrogram)) / np.std(mel_spectrogram)
             mel_spectrogram = torch.tensor(mel_spectrogram).to(device)
 
-            # Forward pass
-            output = model(audio)
+            output = model(mel_spectrogram)
 
-            # Compute loss
             # loss = F.binary_cross_entropy(output, onset_roll)
             loss = criterion(output, onset_roll)
             running_loss += loss.item()
 
-            # Backward pass and optimize
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -338,7 +326,6 @@ def train_maestro(epochs=10):
 
             predicted_frames = (output > 0.6).float()
 
-            
 
             # Only count onsets (1s) in both predicted and actual
             correct_onsets = ((predicted_frames == 1) & (onset_roll == 1)).float().sum()
@@ -355,7 +342,6 @@ def train_maestro(epochs=10):
         print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {avg_train_loss:.4f}, Train Onset Accuracy: {train_onset_accuracy:.4f}")
         print(f"Total silent frames: {total_silent_frames} / {total_frames} ({(total_silent_frames / total_frames) * 100:.2f}% silent frames)")
 
-        # Evaluate on the test set
         evaluate(model, test_dataloader, F.binary_cross_entropy)
         # print(f"Test Loss: {test_loss:.4f}, Test Onset Accuracy: {test_onset_accuracy:.4f}")
 
@@ -367,7 +353,6 @@ def train_slakh2100(epochs=3):
     model = CRNN().to(device)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-    # Calculate pos_weight for BCEWithLogitsLoss
     total_frames = sum([data["frame_roll"].numel() for data in train_dataloader])
     onset_frames = sum([data["frame_roll"].sum().item() for data in train_dataloader])
     pos_weight = (total_frames - onset_frames) / onset_frames
@@ -380,7 +365,7 @@ def train_slakh2100(epochs=3):
         total_predicted_onsets = 0
         total_actual_onsets = 0
         total_silent_frames = 0 
-        total_frames = 0  # Total number of frames
+        total_frames = 0 
 
         for step, data in enumerate(tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{epochs}")):
             audio = data["audio"].to(device)
@@ -393,19 +378,15 @@ def train_slakh2100(epochs=3):
             mel_spectrogram = (mel_spectrogram - np.mean(mel_spectrogram)) / np.std(mel_spectrogram)
             mel_spectrogram = torch.tensor(mel_spectrogram).to(device)
 
-            # Forward pass
             output = model(mel_spectrogram)
 
-            # Compute loss
             loss = criterion(output, frame_roll)
             running_loss += loss.item()
 
-            # Backward pass and optimize
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            # Metrics calculation, similar to MAESTRO setup
             silent_frames = (frame_roll.sum(dim=-1) == 0).sum().item()
             total_silent_frames += silent_frames
             total_frames += frame_roll.size(0) * frame_roll.size(1)
