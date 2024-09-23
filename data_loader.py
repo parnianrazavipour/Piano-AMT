@@ -258,39 +258,48 @@ class Slakh2100(Dataset):
 
         return data
 
-    def load_and_combine_tracks(self, meta_csv: str, midis_dir: str, start_time: float, clip_duration: float) -> dict:
-        with open(meta_csv, 'r') as f:
-            meta = yaml.load(f, Loader=yaml.FullLoader)
 
-        combined_piano_roll = None  # To store the combined piano roll for all instruments
+def load_and_combine_tracks(self, meta_csv: str, midis_dir: str, start_time: float, clip_duration: float) -> dict:
+    with open(meta_csv, 'r') as f:
+        meta = yaml.load(f, Loader=yaml.FullLoader)
 
-        for stem_name, stem_data in meta["stems"].items():
-            if not stem_data["midi_saved"]:
-                continue
+    combined_piano_roll = None  # To store the combined piano roll for all instruments
 
-            midi_path = Path(midis_dir, "{}.mid".format(stem_name))
+    for stem_name, stem_data in meta["stems"].items():
+        if not stem_data["midi_saved"]:
+            continue
 
-            # Load individual MIDI tracks
-            notes, pedals = read_single_track_midi(
-                midi_path=midi_path, 
-                extend_pedal=self.extend_pedal
-            )
+        midi_path = Path(midis_dir, "{}.mid".format(stem_name))
 
-            # Convert to piano roll and combine by summing
-            piano_roll = self.target_transform({"note": notes, "pedal": pedals})
+        # Load individual MIDI tracks
+        notes, pedals = read_single_track_midi(
+            midi_path=midi_path, 
+            extend_pedal=self.extend_pedal
+        )
 
-            if combined_piano_roll is None:
-                combined_piano_roll = piano_roll
-            else:
-                combined_piano_roll += piano_roll  # Sum all tracks
-
-        # Clip the combined piano roll to [0, 1] to ensure valid values
-        combined_piano_roll = np.clip(combined_piano_roll, 0, 1)
-
+        # Prepare data dict with start_time and clip_duration
         data = {
-            "frame_roll": combined_piano_roll,  
+            "note": notes,
+            "pedal": pedals,
             "start_time": start_time,
             "clip_duration": clip_duration
         }
 
-        return data
+        # Convert to piano roll and combine by summing
+        piano_roll = self.target_transform(data)
+
+        if combined_piano_roll is None:
+            combined_piano_roll = piano_roll
+        else:
+            combined_piano_roll += piano_roll  # Sum all tracks
+
+    # Clip the combined piano roll to [0, 1] to ensure valid values
+    combined_piano_roll = np.clip(combined_piano_roll, 0, 1)
+
+    data = {
+        "frame_roll": combined_piano_roll,  
+        "start_time": start_time,
+        "clip_duration": clip_duration
+    }
+
+    return data
