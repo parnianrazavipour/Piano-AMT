@@ -5,7 +5,7 @@ import torchaudio.transforms as transforms
 
 
 class CRNN(nn.Module):
-    def __init__(self, n_class=128, rnn_hidden_size=256, n_rnn_layers=3):
+    def __init__(self, n_class=128, rnn_hidden_size=512, n_rnn_layers=3):
         super(CRNN, self).__init__()
 
         # First convolutional layer

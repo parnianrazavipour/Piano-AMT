@@ -85,35 +85,35 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 
 # from data_loader import Slakh2100
 
-# def load_slakh2100():
-#     root = "/datasets/slakh2100_flac"
+def load_slakh2100():
+    root = "/datasets/slakh2100_flac"
 
-#     # Dataset
-#     train_dataset = Slakh2100(
-#         root=root,
-#         split="train",
-#         sr=sr
-#     )
+    # Dataset
+    train_dataset = Slakh2100(
+        root=root,
+        split="train",
+        sr=sr
+    )
 
-#     test_dataset = Slakh2100(
-#         root=root,
-#         split="test",
-#         sr=sr
-#     )
+    test_dataset = Slakh2100(
+        root=root,
+        split="test",
+        sr=sr
+    )
 
-#     train_dataloader = DataLoader(
-#         dataset=train_dataset, 
-#         batch_size=32, 
-#         num_workers=16, 
-#     )
+    train_dataloader = DataLoader(
+        dataset=train_dataset, 
+        batch_size=32, 
+        num_workers=16, 
+    )
 
-#     test_dataloader = DataLoader(
-#         dataset=test_dataset, 
-#         batch_size=32, 
-#         num_workers=16, 
-#     )
+    test_dataloader = DataLoader(
+        dataset=test_dataset, 
+        batch_size=32, 
+        num_workers=16, 
+    )
     
-#     return test_dataloader, train_dataloader
+    return test_dataloader, train_dataloader
 
 
 
@@ -131,7 +131,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 #     with torch.no_grad():
 #         for data in tqdm(dataloader, desc="Evaluating"):
 #             audio = data["audio"].to(device)
-#             onset_roll = data["frame_roll"].to(device)
+#             onset_roll = data["onset_roll"].to(device)
 #             mel_spectrogram_transform = T.MelSpectrogram(
 #                 sample_rate=sr,
 #                 n_fft=2048,
@@ -163,7 +163,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 #             # output_probs = torch.sigmoid(output)
 
 #             # For thresholding
-#             predicted_frames = (output > 0.6).float()
+#             predicted_frames = (output > 0.65).float()
 
 #             # TPs
 #             correct_onsets = ((predicted_frames == 1) & (onset_roll == 1)).float().sum()
@@ -197,8 +197,8 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 
 #     # Find the optimal threshold for F1 score
 #     # best_f1 = 0
-#     # best_threshold = 0.5
-#     # for threshold in np.arange(0.5, 0.6, 0.7):
+#     # best_threshold = 0.65
+#     # for threshold in np.arange(0.65, 0.65, 0.65):
 #     #     preds = (all_predictions > threshold).astype(int)
 #     #     f1 = f1_score(all_targets, preds)
 #     #     if f1 > best_f1:
@@ -232,7 +232,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 # #                 break
 
 # #             audio = data["audio"].to(device)
-# #             onset_roll = data["frame_roll"].to(device)
+# #             onset_roll = data["onset_roll"].to(device)
 
 # #             # Compute spectrogram
 # #             mel_spectrogram = librosa.feature.melspectrogram(
@@ -249,7 +249,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 
 # #             # Get predictions from model
 # #             output = model(mel_spectrogram)
-# #             predicted_onsets = (output > 0.6).cpu().numpy()
+# #             predicted_onsets = (output > 0.65).cpu().numpy()
 
 # #             # Print the indices of positive numbers
 # #             pred_indices = np.argwhere(predicted_onsets[0] > 0)
@@ -272,7 +272,7 @@ def visualize_predictions(model, dataloader, save_dir="visualizations", num_samp
                 break
 
             audio = data["audio"].to(device)
-            onset_roll = data["frame_roll"].to(device)
+            onset_roll = data["onset_roll"].to(device)
 
             # Compute spectrogram
             mel_spectrogram = librosa.feature.melspectrogram(
@@ -304,11 +304,13 @@ def visualize_predictions(model, dataloader, save_dir="visualizations", num_samp
             # Apply logarithmic scaling
             mel_spectrogram = torch.log1p(mel_spectrogram)
 
+            mel_spectrogram = add_gaussian_noise(mel_spectrogram)
+
             # Normalize the spectrogram
-            # mel_spectrogram = (mel_spectrogram - mel_spectrogram.mean()) / mel_spectrogram.std()
+            mel_spectrogram = (mel_spectrogram - mel_spectrogram.mean()) / mel_spectrogram.std()
 
             output = model(mel_spectrogram)
-            predicted_onsets = (output > 0.6).cpu().numpy()
+            predicted_onsets = (output > 0.65).cpu().numpy()
 
             # Visualize the spectrogram, predicted onsets, and ground truth
             for i in range(len(audio)):  # Loop over each sample in the batch
@@ -400,15 +402,15 @@ def visualize_predictions(model, dataloader, save_dir="visualizations", num_samp
 
 #     scheduler = lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)  # Reduce LR by a factor of 0.1 every 10 epochs
 
-#     total_frames = sum([data["frame_roll"].numel() for data in train_dataloader])
-#     onset_frames = sum([data["frame_roll"].sum().item() for data in train_dataloader])
+#     total_frames = sum([data["onset_roll"].numel() for data in train_dataloader])
+#     onset_frames = sum([data["onset_roll"].sum().item() for data in train_dataloader])
 #     pos_weight = (total_frames - onset_frames) / onset_frames
 #     # criterion = nn.BCELoss()  # Use BCELoss when outputting probabilities
 
     
 
 
-#     # criterion = FocalLoss(gamma=2.0, alpha=0.25).to(device)
+#     # criterion = FocalLoss(gamma=2.0, alpha=0.655).to(device)
 
 
 #     for epoch in range(epochs):
@@ -422,7 +424,7 @@ def visualize_predictions(model, dataloader, save_dir="visualizations", num_samp
 
 #         for step, data in enumerate(tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{epochs}")):
 #             audio = data["audio"].to(device)
-#             onset_roll = data["frame_roll"].to(device)
+#             onset_roll = data["onset_roll"].to(device)
 
 #             mel_spectrogram_transform = T.MelSpectrogram(
 #                 sample_rate=sr,
@@ -465,7 +467,7 @@ def visualize_predictions(model, dataloader, save_dir="visualizations", num_samp
 #             total_silent_frames += silent_frames
 #             total_frames += onset_roll.size(0) * onset_roll.size(1)  # Total number of frames in the batch
 
-#             predicted_frames = (output > 0.6).float()
+#             predicted_frames = (output > 0.65).float()
 
 
 #             correct_onsets = ((predicted_frames == 1) & (onset_roll == 1)).float().sum()
@@ -499,67 +501,67 @@ def visualize_predictions(model, dataloader, save_dir="visualizations", num_samp
 
 
     
-# def train_slakh2100(epochs=3):
-#     test_dataloader, train_dataloader = load_slakh2100()
-#     model = CRNN().to(device)
-#     optimizer = optim.Adam(model.parameters(), lr=0.001)
+def train_slakh2100(epochs=3):
+    test_dataloader, train_dataloader = load_slakh2100()
+    model = CRNN().to(device)
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-#     total_frames = sum([data["frame_roll"].numel() for data in train_dataloader])
-#     onset_frames = sum([data["frame_roll"].sum().item() for data in train_dataloader])
-#     pos_weight = (total_frames - onset_frames) / onset_frames
-#     criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight]).to(device))
+    total_frames = sum([data["onset_roll"].numel() for data in train_dataloader])
+    onset_frames = sum([data["onset_roll"].sum().item() for data in train_dataloader])
+    pos_weight = (total_frames - onset_frames) / onset_frames
+    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight]).to(device))
 
-#     for epoch in range(epochs):
-#         model.train()
-#         running_loss = 0.0
-#         total_correct_onsets = 0
-#         total_predicted_onsets = 0
-#         total_actual_onsets = 0
-#         total_silent_frames = 0 
-#         total_frames = 0 
+    for epoch in range(epochs):
+        model.train()
+        running_loss = 0.0
+        total_correct_onsets = 0
+        total_predicted_onsets = 0
+        total_actual_onsets = 0
+        total_silent_frames = 0 
+        total_frames = 0 
 
-#         for step, data in enumerate(tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{epochs}")):
-#             audio = data["audio"].to(device)
-#             frame_roll = data["frame_roll"].to(device)
+        for step, data in enumerate(tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{epochs}")):
+            audio = data["audio"].to(device)
+            frame_roll = data["onset_roll"].to(device)
     
 
-#             mel_spectrogram = librosa.feature.melspectrogram(
-#                 y=audio.cpu().numpy(), sr=sr, n_fft=2048, hop_length=160, n_mels=229, fmin=0, fmax=8000
-#             )
-#             mel_spectrogram = (mel_spectrogram - np.mean(mel_spectrogram)) / np.std(mel_spectrogram)
-#             mel_spectrogram = torch.tensor(mel_spectrogram).to(device)
+            mel_spectrogram = librosa.feature.melspectrogram(
+                y=audio.cpu().numpy(), sr=sr, n_fft=2048, hop_length=160, n_mels=229, fmin=0, fmax=8000
+            )
+            mel_spectrogram = (mel_spectrogram - np.mean(mel_spectrogram)) / np.std(mel_spectrogram)
+            mel_spectrogram = torch.tensor(mel_spectrogram).to(device)
 
-#             output = model(mel_spectrogram)
+            output = model(mel_spectrogram)
 
-#             loss = criterion(output, frame_roll)
-#             running_loss += loss.item()
+            loss = criterion(output, frame_roll)
+            running_loss += loss.item()
 
-#             optimizer.zero_grad()
-#             loss.backward()
-#             optimizer.step()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-#             silent_frames = (frame_roll.sum(dim=-1) == 0).sum().item()
-#             total_silent_frames += silent_frames
-#             total_frames += frame_roll.size(0) * frame_roll.size(1)
+            silent_frames = (frame_roll.sum(dim=-1) == 0).sum().item()
+            total_silent_frames += silent_frames
+            total_frames += frame_roll.size(0) * frame_roll.size(1)
 
-#             predicted_frames = (output > 0.6).float()
-#             correct_onsets = ((predicted_frames == 1) & (frame_roll == 1)).float().sum()
-#             predicted_onsets = predicted_frames.sum()
-#             actual_onsets = frame_roll.sum()
+            predicted_frames = (output > 0.65).float()
+            correct_onsets = ((predicted_frames == 1) & (frame_roll == 1)).float().sum()
+            predicted_onsets = predicted_frames.sum()
+            actual_onsets = frame_roll.sum()
 
-#             total_correct_onsets += correct_onsets
-#             total_predicted_onsets += predicted_onsets
-#             total_actual_onsets += actual_onsets
+            total_correct_onsets += correct_onsets
+            total_predicted_onsets += predicted_onsets
+            total_actual_onsets += actual_onsets
 
-#         avg_train_loss = running_loss / len(train_dataloader)
-#         train_onset_accuracy = total_correct_onsets / total_actual_onsets if total_actual_onsets > 0 else 0
+        avg_train_loss = running_loss / len(train_dataloader)
+        train_onset_accuracy = total_correct_onsets / total_actual_onsets if total_actual_onsets > 0 else 0
 
-#         print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {avg_train_loss:.4f}, Train Onset Accuracy: {train_onset_accuracy:.4f}")
-#         print(f"Total silent frames: {total_silent_frames} / {total_frames} ({(total_silent_frames / total_frames) * 100:.2f}% silent frames)")
+        print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {avg_train_loss:.4f}, Train Onset Accuracy: {train_onset_accuracy:.4f}")
+        print(f"Total silent frames: {total_silent_frames} / {total_frames} ({(total_silent_frames / total_frames) * 100:.2f}% silent frames)")
 
-#         # Evaluate on the test set
-#         test_loss, test_onset_accuracy, test_precision, test_recall, test_f1 = evaluate(model, test_dataloader, criterion)
-#         print(f"Test Loss: {test_loss:.4f}, Test Onset Accuracy: {test_onset_accuracy:.4f}")
+        # Evaluate on the test set
+        test_loss, test_onset_accuracy, test_precision, test_recall, test_f1 = evaluate(model, test_dataloader, criterion)
+        print(f"Test Loss: {test_loss:.4f}, Test Onset Accuracy: {test_onset_accuracy:.4f}")
 
 # if __name__ == "__main__":
 #     torch.cuda.empty_cache()
@@ -619,6 +621,19 @@ def load_maestro():
     return test_dataloader, train_dataloader
 
 
+def add_gaussian_noise(input_tensor, mean=0.0, std=0.05):
+    noise = torch.randn(input_tensor.size()).to(input_tensor.device) * std + mean
+    return input_tensor + noise
+
+
+
+
+# def add_gaussian_noise(input_tensor, mean= 0.0, std=0.05):
+#         noise = torch.randn(input_tensor.size()).to(input_tensor.device) * std + mean
+#         return input_tensor + noise
+    
+
+
 class InfiniteSampler:
     def __init__(self, dataset):
         self.dataset = dataset
@@ -634,20 +649,50 @@ class InfiniteSampler:
             yield self.indices[self.pointer]
             self.pointer += 1
 
-def train_maestro(steps=10000, save_path="model_checkpoint.pth", test_step_frequency=100, save_step_frequency=100):
+
+class BinaryFocalLoss(nn.Module):
+    def __init__(self, gamma=2.0, alpha=0.25, use_logits=True):
+        super(BinaryFocalLoss, self).__init__()
+        self.gamma = gamma
+        self.alpha = alpha
+        self.use_logits = use_logits
+
+    def forward(self, logits, targets):
+        if self.use_logits:
+            bce_loss = F.binary_cross_entropy_with_logits(logits, targets, reduction='none')
+        else:
+            bce_loss = F.binary_cross_entropy(logits, targets, reduction='none')
+        pt = torch.exp(-bce_loss)
+        focal_loss = self.alpha * (1-pt)**self.gamma * bce_loss
+        return focal_loss.mean()
+
+    
+def train_maestro(steps=10000, save_path="model_checkpoint.pth", test_step_frequency=100, save_step_frequency=100 , onset_tolerance = 0.01 , fps = 100):
     test_dataloader, train_dataloader = load_maestro()
     model = CRNN().to(device)
     optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=1e-4)
 
-    total_frames = sum([data["frame_roll"].numel() for data in train_dataloader])
-    onset_frames = sum([data["frame_roll"].sum().item() for data in train_dataloader])
-    pos_weight = (total_frames - onset_frames) / onset_frames
+    total_frames = sum([data["onset_roll"].numel() for data in train_dataloader])
+    onset_frames = sum([data["onset_roll"].sum().item() for data in train_dataloader])
+    pos_weight = (total_frames - onset_frames) / (onset_frames)
     criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight]).to(device))
+    # criterion = BinaryFocalLoss().to(device)
+    # criterion = nn.BCELoss().to(device)
 
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=2000, gamma=0.1)
 
     train_sampler = InfiniteSampler(train_dataloader.dataset)
-    train_loader = DataLoader(train_dataloader.dataset, batch_size=16, sampler=train_sampler, num_workers=16)
+    train_loader = DataLoader(train_dataloader.dataset, batch_size=8, sampler=train_sampler, num_workers=16)
+    mel_spectrogram_transform = T.MelSpectrogram(
+        sample_rate=sr,
+        n_fft=2048,
+        hop_length=160,
+        n_mels=229,
+        f_min=0,
+        f_max=8000,
+        power=2.0,
+        normalized=True,
+    ).to(device)
 
     step = 0
     model.train()  # Ensure model is in training mode
@@ -658,76 +703,64 @@ def train_maestro(steps=10000, save_path="model_checkpoint.pth", test_step_frequ
         total_actual_onsets = 0
         total_silent_frames = 0
         total_frames = 0
+        all_targets = []
+        all_predictions = []
 
         for data in tqdm(train_loader, desc=f"Step {step}/{steps}"):
             if step >= steps:
                 break
 
             audio = data["audio"].to(device)
-            onset_roll = data["frame_roll"].to(device)
+            onset_roll = data["onset_roll"].to(device)
             frame_roll = onset_roll
-
-            mel_spectrogram_transform = T.MelSpectrogram(
-                sample_rate=sr,
-                n_fft=2048,
-                hop_length=160,
-                n_mels=229,
-                f_min=0,
-                f_max=8000,
-                power=2.0
-            ).to(device)
 
             mel_spectrogram = mel_spectrogram_transform(audio)
             mel_spectrogram = torch.log1p(mel_spectrogram)
+            mel_spectrogram = add_gaussian_noise(mel_spectrogram)
+            mel_spectrogram = (mel_spectrogram - mel_spectrogram.mean()) / mel_spectrogram.std()
 
             output = model(mel_spectrogram)
             loss = criterion(output, onset_roll)
             running_loss += loss.item()
 
-            optimizer.zero_grad()  # Zero gradients
-            loss.backward()        # Backpropagation
-            optimizer.step()        # Update weights
+            optimizer.zero_grad()  
+            loss.backward()        
+            optimizer.step()       
 
-            predicted_frames = (output > 0.6).float()
+            predicted_frames = (output > 0.65).float().cpu().numpy()
+            true_frames = frame_roll.cpu().numpy()
+
+            # Match predicted onsets with true onsets within the tolerance window
+            predicted_frames_flat = predicted_frames.flatten()
+            true_frames_flat = true_frames.flatten()
+            
+            matched_pred_onsets, matched_true_onsets = match_onsets_with_tolerance(
+                predicted_frames_flat, true_frames_flat, tolerance=onset_tolerance, fps=fps
+            )
+
+            all_targets.append(matched_true_onsets)
+            all_predictions.append(matched_pred_onsets)
+
+            # Silent frames count
             silent_frames = (frame_roll.sum(dim=-1) == 0).sum().item()
             total_silent_frames += silent_frames
             total_frames += frame_roll.size(0) * frame_roll.size(1)
 
-            predicted_frames = (output > 0.6).float()
-            correct_onsets = ((predicted_frames == 1) & (frame_roll == 1)).float().sum()
-            predicted_onsets = predicted_frames.sum()
-            actual_onsets = frame_roll.sum()
-
-            total_correct_onsets += correct_onsets
-            total_predicted_onsets += predicted_onsets
-            total_actual_onsets += actual_onsets
-
-            train_onset_accuracy = total_correct_onsets / total_actual_onsets if total_actual_onsets > 0 else 0
-
-            # print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {avg_train_loss:.4f}, Train Onset Accuracy: {train_onset_accuracy:.4f}")
-            # print(f"Total silent frames: {total_silent_frames} / {total_frames} ({(total_silent_frames / total_frames) * 100:.2f}% silent frames)")
-
-            # # Evaluate on the test set
-            # test_loss, test_onset_accuracy, test_precision, test_recall, test_f1 = evaluate(model, test_dataloader, criterion)
-            # print(f"Test Loss: {test_loss:.4f}, Test Onset Accuracy: {test_onset_accuracy:.4f}")
             step += 1
 
             if step % test_step_frequency == 0:
-                train_accuracy = total_correct_onsets / total_actual_onsets if total_actual_onsets > 0 else 0
-                print(f"Step [{step}/{steps}] - Train Loss: {running_loss / step:.4f}, Train Onset Accuracy: {train_onset_accuracy:.4f}")
+                all_targets_flat = np.concatenate(all_targets, axis=0).flatten()
+                all_predictions_flat = np.concatenate(all_predictions, axis=0).flatten()
+
+                train_accuracy = np.sum(all_targets_flat == all_predictions_flat) / len(all_targets_flat)
+
+                avg_train_loss = running_loss / step
+                print(f"Step [{step}/{steps}] - Train Loss: {avg_train_loss:.4f}, Train Onset Accuracy: {train_accuracy:.4f}")
                 print(f"Total silent frames: {total_silent_frames} / {total_frames} ({(total_silent_frames / total_frames) * 100:.2f}% silent frames)")
 
                 model.eval()  # Set model to evaluation mode
-                test_loss, onset_accuracy, test_precision, test_recall, test_f1 = evaluate(model, test_dataloader, criterion)
-                # print(f"Test Loss: {test_loss:.4f}, Test Precision: {test_precision:.4f}, Test Recall: {test_recall:.4f}, Test F1-Score: {test_f1:.4f}")
-                visualize_predictions(model, test_dataloader, num_samples=1)
+                test_loss, onset_accuracy, test_precision, test_recall, test_f1 = evaluate(model, test_dataloader, criterion, fps=fps, onset_tolerance=onset_tolerance)
                 model.train()  # Switch back to training mode after evaluation
-
-            # Optionally, save the model checkpoint periodically
-            # if step % save_step_frequency == 0:
-            #     checkpoint_path = os.path.join(save_path, f"step_{step}.pth")
-            #     torch.save(model.state_dict(), checkpoint_path)
-            #     print(f"Model checkpoint saved at step {step}.")
 
         scheduler.step()
 
@@ -738,7 +771,32 @@ def train_maestro(steps=10000, save_path="model_checkpoint.pth", test_step_frequ
         'steps': step
     }, save_path)
 
-def evaluate(model, dataloader, criterion):
+
+
+
+import numpy as np
+from sklearn.metrics import precision_score, recall_score, f1_score
+from tqdm import tqdm
+
+def match_onsets_with_tolerance(pred_onsets, true_onsets, tolerance, fps):
+    matched_pred_onsets = np.zeros_like(pred_onsets)
+    matched_true_onsets = np.zeros_like(true_onsets)
+
+    # Convert tolerance to frames
+    tolerance_frames = int(tolerance * fps)
+
+    # Loop over true onsets and find matching predicted onsets within tolerance
+    for i, true_onset in enumerate(true_onsets):
+        if true_onset == 1:
+            for j in range(max(0, i - tolerance_frames), min(len(pred_onsets), i + tolerance_frames + 1)):
+                if pred_onsets[j] == 1:
+                    matched_pred_onsets[j] = 1
+                    matched_true_onsets[i] = 1
+                    break
+
+    return matched_pred_onsets, matched_true_onsets
+
+def evaluate(model, dataloader, criterion, fps=100, onset_tolerance=0.01):
     model.eval()  # Set to evaluation mode
     total_loss = 0
     total_correct_onsets = 0
@@ -750,7 +808,7 @@ def evaluate(model, dataloader, criterion):
     with torch.no_grad():
         for data in tqdm(dataloader, desc="Evaluating"):
             audio = data["audio"].to(device)
-            onset_roll = data["frame_roll"].to(device)
+            onset_roll = data["onset_roll"].to(device)
             mel_spectrogram_transform = T.MelSpectrogram(
                 sample_rate=sr,
                 n_fft=2048,
@@ -758,42 +816,44 @@ def evaluate(model, dataloader, criterion):
                 n_mels=229,
                 f_min=0,
                 f_max=8000,
-                power=2.0
-            ).to(device) 
+                power=2.0,
+                normalized=True
+            ).to(device)
 
             # Compute the Mel spectrogram using torchaudio
             mel_spectrogram = mel_spectrogram_transform(audio)
 
             # Apply logarithmic scaling
             mel_spectrogram = torch.log1p(mel_spectrogram)
+            mel_spectrogram = add_gaussian_noise(mel_spectrogram)
+            mel_spectrogram = (mel_spectrogram - mel_spectrogram.mean()) / mel_spectrogram.std()
 
             output = model(mel_spectrogram)
 
             loss = criterion(output, onset_roll)
             total_loss += loss.item()
 
-            # output_probs = torch.sigmoid(output)
+            predicted_frames = (output > 0.65).float().cpu().numpy()
+            true_frames = onset_roll.cpu().numpy()
 
-            # For thresholding
-            predicted_frames = (output > 0.6).float()
+            # Flatten arrays for precision/recall calculation
+            predicted_frames_flat = predicted_frames.flatten()
+            true_frames_flat = true_frames.flatten()
 
-            # TPs
-            correct_onsets = ((predicted_frames == 1) & (onset_roll == 1)).float().sum()
-            predicted_onsets = predicted_frames.sum()  # All predicted onsets (1s)
-            actual_onsets = onset_roll.sum()  # All actual onsets (1s)
+            # Match predicted onsets with true onsets within the tolerance window
+            matched_pred_onsets, matched_true_onsets = match_onsets_with_tolerance(
+                predicted_frames_flat, true_frames_flat, tolerance=onset_tolerance, fps=fps
+            )
 
-            total_correct_onsets += correct_onsets
-            total_predicted_onsets += predicted_onsets
-            total_actual_onsets += actual_onsets
-
-            all_targets.append(onset_roll.cpu().numpy())
-            all_predictions.append(predicted_frames.cpu().numpy())
+            # Append matched predictions and targets for metric calculation
+            all_targets.append(matched_true_onsets)
+            all_predictions.append(matched_pred_onsets)
 
     # Concatenate all predictions and targets for metric calculation
     all_targets = np.concatenate(all_targets, axis=0).flatten()
     all_predictions = np.concatenate(all_predictions, axis=0).flatten()
 
-    # Calculate precision, recall, and F1-score
+    # Calculate precision, recall, and F1-score with the matched onsets
     precision = precision_score(all_targets, all_predictions)
     recall = recall_score(all_targets, all_predictions)
     f1 = f1_score(all_targets, all_predictions)
@@ -801,11 +861,17 @@ def evaluate(model, dataloader, criterion):
     # Average loss
     avg_loss = total_loss / len(dataloader)
     # Onset accuracy
-    onset_accuracy = total_correct_onsets / total_actual_onsets if total_actual_onsets > 0 else 0
+    onset_accuracy = np.sum(all_targets == all_predictions) / len(all_targets)
 
-    print(f"Test acc: {onset_accuracy:0.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}")
+    print(f"Test Loss: {avg_loss:.4f} Test acc: {onset_accuracy:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}")
 
     return avg_loss, onset_accuracy, precision, recall, f1
+
+if __name__ == "__main__":
+    torch.cuda.empty_cache()
+    gc.collect()
+    train_maestro()
+
 
 if __name__ == "__main__":
     torch.cuda.empty_cache()

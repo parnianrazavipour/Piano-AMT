@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import Optional
 import os
+from audidata.io.audio import load, random_start_time
+
 import librosa
 import numpy as np
 import pandas as pd
@@ -67,6 +69,8 @@ class MAESTRO(Dataset):
         self.split = split
         self.sr = sr
         self.crop = crop
+        self.clip_duration = 10
+        self.clip_samples = round(self.clip_duration * self.sr)
         self.target = target
         self.extend_pedal = extend_pedal
         self.transform = transform
@@ -87,8 +91,10 @@ class MAESTRO(Dataset):
             "audio_path": str(audio_path),
         }
 
+        start_time = random_start_time(audio_path)
+
         # Load audio
-        audio_data = self.load_audio(path=audio_path)
+        audio_data = self.load_audio(path=audio_path , start_time=start_time)
         full_data.update(audio_data)
         
         # Load target
@@ -124,28 +130,27 @@ class MAESTRO(Dataset):
 
         return meta_dict
 
-    def load_audio(self, path: str) -> dict:
 
-        audio_duration = librosa.get_duration(path=path)
-        
-        if self.crop:
-            start_time, clip_duration = self.crop(audio_duration=audio_duration)
-        else:
-            start_time = 0.
-            clip_duration = 10
+
+    def load_audio(self, path: str, start_time: float) -> dict:
+
 
         audio = load(
-            path=path, 
-            sr=self.sr, 
-            offset=start_time, 
-            duration=clip_duration
-        )
+            path,
+            sr=self.sr,
+            mono= True,
+            offset=start_time,
+            duration=self.clip_duration
+        )        
+
+        audio = librosa.util.fix_length(data=audio, size=self.clip_samples, axis=-1)
+
         # shape: (channels, audio_samples)
 
         data = {
             "audio": audio, 
             "start_time": start_time,
-            "duration": clip_duration if clip_duration else audio_duration
+            "duration": self.clip_duration
         }
 
         if self.transform is not None:
